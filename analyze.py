@@ -2,6 +2,26 @@ import os
 import ijson.backends.yajl2_cffi as ijson
 import json
 
+def membersByActivity(conversation):
+    messageCounts = {m["name"]: len(list(filter(lambda e: e["author"] == m["id"], conversation["messages"]))) for m in conversation["members"]}
+    activitySorted = [" ".join([s[0], str(s[1])]) for s in reversed(sorted(messageCounts.items(), key=lambda k:k[1]))]
+    return activitySorted
+
+def wordsByFrequency(conversation):
+    import collections, itertools
+    words = list(itertools.chain.from_iterable([w for w in (m["content"].lower().split(" ") for m in conversation["messages"] if m["content"])]))
+    frequencies = collections.defaultdict(int)
+    for w in words: frequencies[w] += 1
+    return frequencies
+    
+def convertToText(conversation):
+    from datetime import datetime
+    return "\n".join(datetime.fromtimestamp(int(m["timestamp"])/1000000).strftime("%D %H:%M ") + (lambda a: a[0] if len(a) > 0 else "Unkown")([mem["name"] for mem in conversation["members"] if mem["id"] == m["author"]]) + ": "+m["content"] for m in sorted(conversation["messages"], key=lambda m:m["timestamp"]) if m["content"])
+
+def markovSentence(conversation):
+    import markovify
+    return markovify.NewlineText("\n".join(map(lambda m: m["content"], conversation["messages"]))).make_sentence()
+
 files = []
 
 print("Actions:\n1. Process Logs\n2. Analyze Proccesed Logs")
@@ -64,17 +84,15 @@ elif action == "2":
         i += 1
         
     conversation = conversations[int(input("Enter number of conversation to analyze: "))-1]
-    
-    messageCounts = {m["name"]: len(list(filter(lambda e: e["author"] == m["id"], conversation["messages"]))) for m in conversation["members"]}
-    print("Members by activity:")
-    activitySorted = [" ".join([s[0], str(s[1])]) for s in reversed(sorted(messageCounts.items(), key=lambda k:k[1]))]
-    for i, m in enumerate(activitySorted):
-        print(str(i+1) + ". " + m)
+
     
     print("Most common words:")
-    import collections, itertools
-    words = list(itertools.chain.from_iterable([w for w in (m["content"].lower().split(" ") for m in conversation["messages"] if m["content"])]))
-    frequencies = collections.defaultdict(int)
-    for w in words: frequencies[w] += 1
-    for i, (x, _) in enumerate(zip(reversed(sorted(frequencies.items(), key=lambda k:k[1])), range(50))):
+    for i, (x, _) in enumerate(zip(reversed(sorted(wordsByFrequency(conversation).items(), key=lambda k:k[1])), range(10))):
         print(str(i+1) + ". " + x[0])
+        
+    print("Members by activity:")
+    for i, m in enumerate(membersByActivity(conversation)):
+        print(str(i+1) + ". " + m)
+        
+    print("Markov chain sentence:")
+    print(markovSentence(conversation))
